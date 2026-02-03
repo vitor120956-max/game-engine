@@ -1,70 +1,17 @@
 {
-  "meta": {
-    "name": "GameGen Project",
-    "version": "0.1",
-    "author": "GameGen-AI",
-    "engine": "GameGen-Core"
-  },
-
   "game": {
-    "type": "auto",
-    "modes": ["roguelike", "idle", "arena", "runner", "platformer"],
-    "startMode": "roguelike"
+    "name": "Rucoy Style IA",
+    "version": "1.2",
+    "worldSize": 4000
   },
-
-  "display": {
-    "width": 360,
-    "height": 640,
-    "scale": "auto",
-    "backgroundColor": "#000000"
-  },
-
   "player": {
-    "speed": 120,
-    "hp": 100,
-    "damage": 10,
-    "regen": 0,
-    "sprite": "player"
+    "speed": 5,
+    "color": "#00ffff",
+    "startPos": {"x": 2000, "y": 2000}
   },
-
-  "enemies": {
-    "enabled": true,
-    "spawnRate": 2,
-    "maxOnScreen": 20,
-    "baseHp": 20,
-    "baseDamage": 5,
-    "scaling": "time"
-  },
-
-  "progression": {
-    "xpEnabled": true,
-    "levelUpFormula": "level * 20",
-    "rewardPerLevel": {
-      "hp": 10,
-      "damage": 2,
-      "speed": 5
-    }
-  },
-
-  "idle": {
-    "enabled": true,
-    "gainPerSecond": 1,
-    "offlineGain": true
-  },
-
-  "arena": {
-    "waves": true,
-    "waveSize": 5,
-    "bossEvery": 5
-  },
-
-  "physics": {
-    "movement": "topdown",
-    "collision": true
-  },
-
-  "debug": {
-    "showFPS": true,
-    "logs": true
+  "display": {
+    "backgroundColor": "#1a1a1a",
+    "gridColor": "#333",
+    "gridSize": 100
   }
 }
