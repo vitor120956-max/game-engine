@@ -1,42 +1,15 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-  <meta charset="UTF-8" />
-  <title>GameGen-AI</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      background: #000;
-      overflow: hidden;
-      touch-action: none;
-    }
-
-    canvas {
-      display: block;
-      margin: 0 auto;
-      background: #000;
-    }
-
-    #hint {
-      position: fixed;
-      bottom: 8px;
-      left: 0;
-      right: 0;
-      text-align: center;
-      font-size: 12px;
-      color: #aaa;
-      opacity: 0.6;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Meu Motor de Jogo</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; }
+        canvas { display: block; }
+    </style>
 </head>
-
 <body>
-  <canvas id="game"></canvas>
-  <div id="hint">GameGen-AI • Motor Universal</div>
-
-  <script src="engine.js"></script>
+    <script src="engine.js"></script>
 </body>
 </html>
