@@ -3,129 +3,158 @@ const ctx = canvas.getContext('2d');
 document.body.appendChild(canvas);
 canvas.width = window.innerWidth; canvas.height = window.innerHeight;
 
-// --- SISTEMA DE CONFIGURAÇÃO ---
 let worldSize = 4000;
-let player = { x: 2000, y: 2000, s: 20, speed: 5, vx: 0, vy: 0, color: '#00ffff', hp: 100, gold: 0, xp: 0, lvl: 1, anim: 0 };
-let cam = { x: 2000, y: 2000, lerp: 0.1 };
-let joystick = { active: false, baseX: 0, baseY: 0, stickX: 0, stickY: 0, size: 55 };
+let player = { x: 2000, y: 2000, s: 24, speed: 5, vx: 0, vy: 0, color: '#00ffff', hp: 100, lvl: 1, gold: 0, frame: 0, attacking: 0 };
+let cam = { x: 2000, y: 2000 };
+let joystick = { active: false, baseX: 0, baseY: 0, stickX: 0, stickY: 0 };
+let mobs = [], trees = [], shards = [];
 
-let mobs = [], trees = [], particles = [];
+// Gerador de mundo melhorado
+for(let i=0; i<40; i++) mobs.push({ x: Math.random()*worldSize, y: Math.random()*worldSize, hp: 40, s: 18, t: Math.random()*10 });
+for(let i=0; i<50; i++) trees.push({ x: Math.random()*worldSize, y: Math.random()*worldSize, s: 40 + Math.random()*20 });
 
-// Gerar Mundo com Variedade
-for(let i=0; i<35; i++) mobs.push({ x: Math.random()*worldSize, y: Math.random()*worldSize, hp: 30, s: 15, vx: 0, vy: 0, t: Math.random()*100 });
-for(let i=0; i<40; i++) trees.push({ x: Math.random()*worldSize, y: Math.random()*worldSize, s: 35 + Math.random()*20, offset: Math.random()*5 });
-
-// --- CONTROLES ---
-window.addEventListener('touchstart', e => {
-    let t = e.touches[0]; joystick.active = true;
-    joystick.baseX = t.clientX; joystick.baseY = t.clientY;
-    joystick.stickX = t.clientX; joystick.stickY = t.clientY;
-}, {passive: false});
-
-window.addEventListener('touchmove', e => {
-    if (joystick.active) {
-        let t = e.touches[0];
-        let dx = t.clientX - joystick.baseX, dy = t.clientY - joystick.baseY;
-        let dist = Math.hypot(dx, dy);
-        let max = joystick.size;
-        if (dist > max) {
-            joystick.stickX = joystick.baseX + (dx/dist)*max;
-            joystick.stickY = joystick.baseY + (dy/dist)*max;
-        } else { joystick.stickX = t.clientX; joystick.stickY = t.clientY; }
-        player.vx = ((joystick.stickX - joystick.baseX)/max) * player.speed;
-        player.vy = ((joystick.stickY - joystick.baseY)/max) * player.speed;
-    }
-}, {passive: false});
-
-window.addEventListener('touchend', () => { joystick.active=false; player.vx=0; player.vy=0; });
-
-// --- FUNÇÕES GRÁFICAS ---
-
-function spawnPart(x, y, color) {
-    for(let i=0; i<5; i++) particles.push({x, y, vx:(Math.random()-0.5)*4, vy:(Math.random()-0.5)*4, life: 1, color});
-}
+// --- SISTEMA DE DESENHO AVANÇADO ---
 
 function drawTree(t) {
-    let wind = Math.sin(Date.now()/1000 + t.offset) * 3;
-    ctx.fillStyle = "#3e2723"; ctx.fillRect(t.x-cam.x-8, t.y-cam.y, 16, 25); // Tronco
-    ctx.fillStyle = "#2e7d32"; 
-    ctx.beginPath(); 
-    ctx.arc(t.x-cam.x + wind, t.y-cam.y-15, t.s, 0, 7); // Copa balançando
-    ctx.fill();
+    let gx = t.x - cam.x; let gy = t.y - cam.y;
+    // Sombra projetada
+    ctx.fillStyle = "rgba(0,0,0,0.2)";
+    ctx.beginPath(); ctx.ellipse(gx, gy+20, 30, 10, 0, 0, 7); ctx.fill();
+    // Tronco com textura
+    ctx.fillStyle = "#5D4037"; ctx.fillRect(gx-10, gy, 20, 40);
+    ctx.fillStyle = "#3E2723"; ctx.fillRect(gx+2, gy, 4, 40);
+    // Copa em camadas (Zelda Style)
+    let colors = ["#2E7D32", "#388E3C", "#4CAF50"];
+    colors.forEach((c, i) => {
+        ctx.fillStyle = c;
+        ctx.beginPath();
+        ctx.arc(gx, gy - (i*15), t.s - (i*8), 0, 7);
+        ctx.fill();
+        // Detalhe de folha
+        ctx.fillStyle = "rgba(255,255,255,0.1)";
+        ctx.beginPath(); ctx.arc(gx-5, gy-(i*15)-5, 5, 0, 7); ctx.fill();
+    });
+}
+
+function drawPlayer() {
+    let gx = player.x - cam.x; let gy = player.y - cam.y;
+    player.frame += 0.15;
+    let walkY = Math.sin(player.frame) * 3;
+    let isMoving = Math.abs(player.vx) + Math.abs(player.vy) > 0;
+
+    // Sombra
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.beginPath(); ctx.ellipse(gx, gy+15, 15, 5, 0, 0, 7); ctx.fill();
+
+    // Braços (Animados)
+    ctx.fillStyle = player.color;
+    let armX = isMoving ? Math.sin(player.frame)*8 : 0;
+    ctx.fillRect(gx-20, gy-5 + armX, 8, 8); // Esq
+    ctx.fillRect(gx+12, gy-5 - armX, 8, 8); // Dir
+
+    // Ataque (Efeito de Espada)
+    if(player.attacking > 0) {
+        player.attacking -= 0.1;
+        ctx.strokeStyle = "white"; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.arc(gx, gy, 40, -1, 1); ctx.stroke();
+    }
+
+    // Corpo e Cabeça
+    ctx.fillStyle = player.color; ctx.fillRect(gx-12, gy-10 + walkY, 24, 25); 
+    ctx.fillStyle = "#FFCCBC"; ctx.fillRect(gx-10, gy-25 + walkY, 20, 18); // Rosto
+    
+    // Olhos que seguem o movimento
+    ctx.fillStyle = "#000";
+    let eyeX = (player.vx/player.speed)*2;
+    ctx.fillRect(gx-6 + eyeX, gy-20 + walkY, 3, 5);
+    ctx.fillRect(gx+3 + eyeX, gy-20 + walkY, 3, 5);
 }
 
 function drawMob(m) {
+    let gx = m.x - cam.x; let gy = m.y - cam.y;
     m.t += 0.1;
-    let wobble = Math.sin(m.t) * 3;
-    ctx.fillStyle = "rgba(0,0,0,0.2)"; // Sombra
-    ctx.beginPath(); ctx.ellipse(m.x-cam.x, m.y-cam.y+12, 12, 5, 0, 0, 7); ctx.fill();
+    let sq = Math.sin(m.t) * 4;
     
-    ctx.fillStyle = "#32CD32";
-    ctx.beginPath(); 
-    ctx.ellipse(m.x-cam.x, m.y-cam.y + wobble, 15 + wobble/2, 15 - wobble/2, 0, 0, 7); 
+    // Corpo Slime Detalhado
+    let grad = ctx.createRadialGradient(gx, gy, 2, gx, gy, 20);
+    grad.addColorStop(0, "#81C784"); grad.addColorStop(1, "#2E7D32");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(gx, gy+sq, 18+sq, 15-sq, 0, 0, 7);
     ctx.fill();
+
+    // Olhos Bravos
+    ctx.fillStyle = "white";
+    ctx.beginPath(); ctx.arc(gx-7, gy+sq-2, 4, 0, 7); ctx.arc(gx+7, gy+sq-2, 4, 0, 7); ctx.fill();
+    ctx.fillStyle = "black";
+    ctx.beginPath(); ctx.arc(gx-7, gy+sq-2, 2, 0, 7); ctx.arc(gx+7, gy+sq-2, 2, 0, 7); ctx.fill();
 }
 
 function update() {
-    // Câmera Suave (Lerp)
-    cam.x += (player.x - canvas.width/2 - cam.x) * cam.lerp;
-    cam.y += (player.y - canvas.height/2 - cam.y) * cam.lerp;
+    // Câmera Lerp
+    cam.x += (player.x - canvas.width/2 - cam.x) * 0.1;
+    cam.y += (player.y - canvas.height/2 - cam.y) * 0.1;
 
-    // Movimentação e Colisão
+    // Movimento com Colisão Simples
     let nx = player.x + player.vx, ny = player.y + player.vy;
-    let collision = false;
-    trees.forEach(t => { if(Math.hypot(nx-t.x, ny-t.y) < 45) collision = true; });
-    if(!collision) { player.x = nx; player.y = ny; }
+    let col = false;
+    trees.forEach(t => { if(Math.hypot(nx-t.x, ny-t.y) < 40) col = true; });
+    if(!col) { player.x = nx; player.y = ny; }
 
-    // Render
-    ctx.fillStyle = "#143314"; ctx.fillRect(0,0,canvas.width,canvas.height); // Solo Escuro
-
-    // Partículas
-    particles.forEach((p, i) => {
-        p.x += p.vx; p.y += p.vy; p.life -= 0.02;
-        ctx.globalAlpha = p.life; ctx.fillStyle = p.color;
-        ctx.fillRect(p.x-cam.x, p.y-cam.y, 4, 4);
-        if(p.life <= 0) particles.splice(i, 1);
-    });
-    ctx.globalAlpha = 1;
+    // Fundo
+    ctx.fillStyle = "#1B5E20"; ctx.fillRect(0,0,canvas.width,canvas.height);
 
     trees.forEach(drawTree);
 
     mobs.forEach((m, i) => {
-        // IA: Vagar ou Perseguir
-        let dist = Math.hypot(player.x-m.x, player.y-m.y);
-        if(dist < 200) { // Persegue
-            m.x += (player.x-m.x)/dist * 1.5;
-            m.y += (player.y-m.y)/dist * 1.5;
-        } else { // Vaga
-            m.x += Math.sin(m.t/2); m.y += Math.cos(m.t/2);
-        }
-        
+        let d = Math.hypot(player.x-m.x, player.y-m.y);
+        if(d < 250) { m.x += (player.x-m.x)/d*2; m.y += (player.y-m.y)/d*2; }
         drawMob(m);
-
-        // Combate Visual
-        if(dist < 50) {
-            m.hp -= 1;
-            spawnPart(m.x, m.y, "#fff");
-            if(m.hp <= 0) { mobs.splice(i, 1); player.gold += 5; player.xp += 10; }
+        if(d < 50) {
+            player.attacking = 1; m.hp -= 2;
+            if(m.hp <= 0) {
+                for(let j=0; j<8; j++) shards.push({x:m.x, y:m.y, vx:(Math.random()-0.5)*10, vy:(Math.random()-0.5)*10, v:1});
+                mobs.splice(i,1); player.gold += 10;
+            }
         }
     });
 
-    // Player com Animação de Quicar
-    let pWobble = (player.vx !== 0 || player.vy !== 0) ? Math.sin(Date.now()/100)*4 : 0;
-    ctx.fillStyle = player.color;
-    ctx.shadowBlur = 15; ctx.shadowColor = player.color;
-    ctx.fillRect(player.x-cam.x-12, player.y-cam.y-12 + pWobble, 24, 24 - pWobble);
-    ctx.shadowBlur = 0;
+    // Partículas de Morte (Desintegração)
+    shards.forEach((s, i) => {
+        s.x += s.vx; s.y += s.vy; s.v -= 0.02;
+        ctx.fillStyle = `rgba(46, 125, 50, ${s.v})`;
+        ctx.fillRect(s.x-cam.x, s.y-cam.y, 6, 6);
+        if(s.v <= 0) shards.splice(i, 1);
+    });
 
-    // Joystick Visível
+    drawPlayer();
+
+    // Joystick HUD
     if(joystick.active) {
-        ctx.strokeStyle = "rgba(255,255,255,0.4)"; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(joystick.baseX, joystick.baseY, joystick.size, 0, 7); ctx.stroke();
-        ctx.fillStyle = "rgba(255,255,255,0.8)";
-        ctx.beginPath(); ctx.arc(joystick.stickX, joystick.stickY, 20, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.arc(joystick.baseX, joystick.baseY, 50, 0, 7); ctx.strokeStyle="white"; ctx.stroke();
+        ctx.beginPath(); ctx.arc(joystick.stickX, joystick.stickY, 25, 0, 7); ctx.fillStyle="rgba(255,255,255,0.5)"; ctx.fill();
     }
 
     requestAnimationFrame(update);
 }
+
+// Eventos Touch
+window.addEventListener('touchstart', e => {
+    let t = e.touches[0]; joystick.active = true;
+    joystick.baseX = t.clientX; joystick.baseY = t.clientY;
+    joystick.stickX = t.clientX; joystick.stickY = t.clientY;
+});
+window.addEventListener('touchmove', e => {
+    if(joystick.active) {
+        let t = e.touches[0];
+        let dx = t.clientX-joystick.baseX, dy = t.clientY-joystick.baseY, dist = Math.hypot(dx, dy);
+        if(dist > 50) { joystick.stickX = joystick.baseX+(dx/dist)*50; joystick.stickY = joystick.baseY+(dy/dist)*50; }
+        else { joystick.stickX = t.clientX; joystick.stickY = t.clientY; }
+        player.vx = ((joystick.stickX-joystick.baseX)/50)*player.speed;
+        player.vy = ((joystick.stickY-joystick.baseY)/50)*player.speed;
+    }
+    e.preventDefault();
+}, {passive:false});
+window.addEventListener('touchend', () => { joystick.active=false; player.vx=0; player.vy=0; });
+
 update();
