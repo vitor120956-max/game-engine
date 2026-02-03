@@ -5,79 +5,111 @@ document.body.appendChild(canvas);
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-let player = { x: canvas.width / 2, y: canvas.height / 2, size: 22, color: '#00ffff' };
-let enemies = [];
-let bullets = [];
-let score = 0;
-let gameOver = false;
+// Estado do Jogo
+let worldSize = 4000;
+let player = { x: 2000, y: 2000, s: 20, speed: 5, vx: 0, vy: 0, color: '#00ffff' };
+let camera = { x: 0, y: 0 };
+let touchStart = null;
 
-// Controle Touch
-canvas.addEventListener('touchmove', (e) => {
-    if(!gameOver) {
-        player.x = e.touches[0].clientX;
-        player.y = e.touches[0].clientY;
+// Sistema de Controle (Mobile)
+window.addEventListener('touchstart', e => { 
+    touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY }; 
+});
+
+window.addEventListener('touchmove', e => {
+    if (touchStart) {
+        let dx = e.touches[0].clientX - touchStart.x;
+        let dy = e.touches[0].clientY - touchStart.y;
+        let dist = Math.hypot(dx, dy);
+        player.vx = (dx / dist) * player.speed;
+        player.vy = (dy / dist) * player.speed;
     }
     e.preventDefault();
 }, { passive: false });
 
-// IA: Gerador de Inimigos LENTOS (Ajustado)
-function spawnEnemy() {
-    if(gameOver) return;
-    const side = Math.floor(Math.random() * 4);
-    let x, y;
-    if(side === 0) { x = 0; y = Math.random() * canvas.height; }
-    else if(side === 1) { x = canvas.width; y = Math.random() * canvas.height; }
-    else if(side === 2) { x = Math.random() * canvas.width; y = 0; }
-    else { x = Math.random() * canvas.width; y = canvas.height; }
-    
-    // Velocidade 0.6 (metade da anterior) para você conseguir desviar
-    enemies.push({ x, y, size: 18, speed: 0.6 + (score / 2000) });
+window.addEventListener('touchend', () => { player.vx = 0; player.vy = 0; touchStart = null; });
+
+// Função que desenha o Sprite Detalhado (Estilo RPG)
+function drawCharacter(x, y, color) {
+    ctx.save();
+    ctx.translate(x - camera.x, y - camera.y);
+
+    // Sombra
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.beginPath();
+    ctx.ellipse(0, 15, 12, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Capa/Corpo
+    ctx.fillStyle = color;
+    ctx.fillRect(-12, -10, 24, 20); 
+
+    // Cabeça
+    ctx.fillStyle = "#eee";
+    ctx.fillRect(-10, -22, 20, 15);
+
+    // Viseira (Olhos)
+    ctx.fillStyle = "#222";
+    ctx.fillRect(-8, -17, 16, 4);
+
+    // Mãos Animadas (Procedural)
+    ctx.fillStyle = color;
+    let swing = Math.sin(Date.now() / 150) * 4;
+    if(player.vx !== 0 || player.vy !== 0) {
+        ctx.fillRect(-16, -5 + swing, 6, 6); // Mão Esq
+        ctx.fillRect(10, -5 - swing, 6, 6);  // Mão Dir
+    } else {
+        ctx.fillRect(-15, -5, 5, 5);
+        ctx.fillRect(10, -5, 5, 5);
+    }
+
+    ctx.restore();
 }
 
-// IA de Defesa: Tiro Automático
-setInterval(() => {
-    if(!gameOver && enemies.length > 0) {
-        // Encontra o inimigo mais próximo para atirar
-        let nearest = enemies[0];
-        let minDist = Math.hypot(nearest.x - player.x, nearest.y - player.y);
-        
-        enemies.forEach(en => {
-            let d = Math.hypot(en.x - player.x, en.y - player.y);
-            if(d < minDist) {
-                minDist = d;
-                nearest = en;
-            }
-        });
-
-        let dx = nearest.x - player.x;
-        let dy = nearest.y - player.y;
-        let angle = Math.atan2(dy, dx);
-        
-        bullets.push({
-            x: player.x,
-            y: player.y,
-            vx: Math.cos(angle) * 7,
-            vy: Math.sin(angle) * 7
-        });
+function drawGrid() {
+    ctx.strokeStyle = "#222";
+    ctx.lineWidth = 1;
+    let size = 100;
+    for (let x = 0; x <= worldSize; x += size) {
+        ctx.beginPath();
+        ctx.moveTo(x - camera.x, 0 - camera.y);
+        ctx.lineTo(x - camera.x, worldSize - camera.y);
+        ctx.stroke();
     }
-}, 500); // Atira 2 vezes por segundo
-
-setInterval(spawnEnemy, 2000); 
+    for (let y = 0; y <= worldSize; y += size) {
+        ctx.beginPath();
+        ctx.moveTo(0 - camera.x, y - camera.y);
+        ctx.lineTo(worldSize - camera.x, y - camera.y);
+        ctx.stroke();
+    }
+}
 
 function update() {
-    if(gameOver) {
-        ctx.fillStyle = "white";
-        ctx.font = "30px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText("FIM DE JOGO", canvas.width/2, canvas.height/2);
-        ctx.fillText("Score: " + score, canvas.width/2, canvas.height/2 + 50);
-        return;
-    }
+    // Física de Movimento
+    player.x += player.vx;
+    player.y += player.vy;
 
-    ctx.fillStyle = 'black';
+    // Limites do Mundo
+    player.x = Math.max(0, Math.min(worldSize, player.x));
+    player.y = Math.max(0, Math.min(worldSize, player.y));
+
+    // Câmera Suave seguindo o Player
+    camera.x = player.x - canvas.width / 2;
+    camera.y = player.y - canvas.height / 2;
+
+    // Renderização
+    ctx.fillStyle = "#111"; // Fundo Escuro
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Desenha Player (Com brilho)
-    ctx.shadowBlur = 10;
-    ctx.shadowColor = "#00ffff";
-    ctx.fillStyle = player.color;
+    drawGrid();
+    drawCharacter(player.x, player.y, player.color);
+
+    // Mini Interface de Posição
+    ctx.fillStyle = "white";
+    ctx.font = "14px Monospace";
+    ctx.fillText(`COORDENADAS: X:${Math.floor(player.x)} Y:${Math.floor(player.y)}`, 20, 30);
+
+    requestAnimationFrame(update);
+}
+
+update();
