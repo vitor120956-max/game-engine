@@ -11,7 +11,7 @@ let bullets = [];
 let score = 0;
 let gameOver = false;
 
-// Controle Touch Suave
+// Controle Touch
 canvas.addEventListener('touchmove', (e) => {
     if(!gameOver) {
         player.x = e.touches[0].clientX;
@@ -20,7 +20,7 @@ canvas.addEventListener('touchmove', (e) => {
     e.preventDefault();
 }, { passive: false });
 
-// IA: Gerador de Inimigos (Equilibrado)
+// IA: Gerador de Inimigos LENTOS (Ajustado)
 function spawnEnemy() {
     if(gameOver) return;
     const side = Math.floor(Math.random() * 4);
@@ -30,109 +30,54 @@ function spawnEnemy() {
     else if(side === 2) { x = Math.random() * canvas.width; y = 0; }
     else { x = Math.random() * canvas.width; y = canvas.height; }
     
-    // Velocidade justa: começa devagar e aumenta com o tempo
-    enemies.push({ x, y, size: 18, speed: 1.2 + (score / 500) });
+    // Velocidade 0.6 (metade da anterior) para você conseguir desviar
+    enemies.push({ x, y, size: 18, speed: 0.6 + (score / 2000) });
 }
 
-// Sistema de Tiro Automático (IA de Defesa)
+// IA de Defesa: Tiro Automático
 setInterval(() => {
     if(!gameOver && enemies.length > 0) {
-        // Atira no inimigo mais próximo
-        let target = enemies[0];
-        let dx = target.x - player.x;
-        let dy = target.y - player.y;
+        // Encontra o inimigo mais próximo para atirar
+        let nearest = enemies[0];
+        let minDist = Math.hypot(nearest.x - player.x, nearest.y - player.y);
+        
+        enemies.forEach(en => {
+            let d = Math.hypot(en.x - player.x, en.y - player.y);
+            if(d < minDist) {
+                minDist = d;
+                nearest = en;
+            }
+        });
+
+        let dx = nearest.x - player.x;
+        let dy = nearest.y - player.y;
         let angle = Math.atan2(dy, dx);
         
         bullets.push({
             x: player.x,
             y: player.y,
-            velX: Math.cos(angle) * 5,
-            velY: Math.sin(angle) * 5
+            vx: Math.cos(angle) * 7,
+            vy: Math.sin(angle) * 7
         });
     }
-}, 600); // Um tiro a cada 0.6 segundos
+}, 500); // Atira 2 vezes por segundo
 
 setInterval(spawnEnemy, 2000); 
 
 function update() {
     if(gameOver) {
         ctx.fillStyle = "white";
-        ctx.font = "bold 40px Arial";
+        ctx.font = "30px Arial";
         ctx.textAlign = "center";
-        ctx.fillText("GAME OVER", canvas.width/2, canvas.height/2);
-        ctx.font = "20px Arial";
-        ctx.fillText("Toque para reiniciar", canvas.width/2, canvas.height/2 + 50);
+        ctx.fillText("FIM DE JOGO", canvas.width/2, canvas.height/2);
+        ctx.fillText("Score: " + score, canvas.width/2, canvas.height/2 + 50);
         return;
     }
 
     ctx.fillStyle = 'black';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Desenha Player
-    ctx.shadowBlur = 15;
-    ctx.shadowColor = player.color;
+    // Desenha Player (Com brilho)
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = "#00ffff";
     ctx.fillStyle = player.color;
-    ctx.beginPath();
-    ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    // Processa Tiros
-    bullets.forEach((b, bIdx) => {
-        b.x += b.velX;
-        b.y += b.velY;
-        ctx.fillStyle = "yellow";
-        ctx.beginPath();
-        ctx.arc(b.x, b.y, 4, 0, Math.PI*2);
-        ctx.fill();
-
-        // Remove tiros fora da tela
-        if(b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) {
-            bullets.splice(bIdx, 1);
-        }
-    });
-
-    // IA dos Inimigos e Colisões
-    enemies.forEach((en, eIdx) => {
-        let dx = player.x - en.x;
-        let dy = player.y - en.y;
-        let dist = Math.hypot(dx, dy);
-        
-        en.x += (dx / dist) * en.speed;
-        en.y += (dy / dist) * en.speed;
-
-        ctx.fillStyle = '#ff4444';
-        ctx.fillRect(en.x - en.size/2, en.y - en.size/2, en.size, en.size);
-
-        // Colisão Tiro -> Inimigo
-        bullets.forEach((b, bIdx) => {
-            let dBullet = Math.hypot(en.x - b.x, en.y - b.y);
-            if(dBullet < en.size) {
-                enemies.splice(eIdx, 1);
-                bullets.splice(bIdx, 1);
-                score += 10;
-            }
-        });
-
-        // Colisão Inimigo -> Player
-        if(dist < player.size) {
-            gameOver = true;
-        }
-    });
-
-    ctx.fillStyle = "white";
-    ctx.font = "20px Arial";
-    ctx.textAlign = "left";
-    ctx.fillText("Score: " + score, 20, 40);
-
-    requestAnimationFrame(update);
-}
-
-// Reiniciar ao tocar na tela após morrer
-canvas.addEventListener('touchstart', () => {
-    if(gameOver) {
-        location.reload();
-    }
-});
-
-update();
