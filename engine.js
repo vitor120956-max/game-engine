@@ -5,111 +5,147 @@ document.body.appendChild(canvas);
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-// Estado do Jogo
+// --- CONFIGURAÇÃO ---
 let worldSize = 4000;
 let player = { x: 2000, y: 2000, s: 20, speed: 5, vx: 0, vy: 0, color: '#00ffff' };
 let camera = { x: 0, y: 0 };
-let touchStart = null;
 
-// Sistema de Controle (Mobile)
-window.addEventListener('touchstart', e => { 
-    touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY }; 
+// Joystick
+let joystick = { active: false, baseX: 0, baseY: 0, stickX: 0, stickY: 0, size: 50 };
+
+// Entidades (Monstros e Itens)
+let mobs = [];
+let items = [];
+const SLIME_COLOR = "#32CD32";
+
+// Inicializar Monstros (Slimes)
+for(let i=0; i<30; i++) {
+    mobs.push({
+        x: Math.random() * worldSize,
+        y: Math.random() * worldSize,
+        s: 15,
+        hp: 20
+    });
+}
+
+// --- CONTROLES ---
+window.addEventListener('touchstart', e => {
+    let touch = e.touches[0];
+    joystick.active = true;
+    joystick.baseX = touch.clientX;
+    joystick.baseY = touch.clientY;
+    joystick.stickX = touch.clientX;
+    joystick.stickY = touch.clientY;
 });
 
 window.addEventListener('touchmove', e => {
-    if (touchStart) {
-        let dx = e.touches[0].clientX - touchStart.x;
-        let dy = e.touches[0].clientY - touchStart.y;
+    if (joystick.active) {
+        let touch = e.touches[0];
+        let dx = touch.clientX - joystick.baseX;
+        let dy = touch.clientY - joystick.baseY;
         let dist = Math.hypot(dx, dy);
-        player.vx = (dx / dist) * player.speed;
-        player.vy = (dy / dist) * player.speed;
+        let maxLen = joystick.size;
+
+        if (dist > maxLen) {
+            joystick.stickX = joystick.baseX + (dx / dist) * maxLen;
+            joystick.stickY = joystick.baseY + (dy / dist) * maxLen;
+        } else {
+            joystick.stickX = touch.clientX;
+            joystick.stickY = touch.clientY;
+        }
+
+        // Calcular velocidade do player
+        let moveX = (joystick.stickX - joystick.baseX) / maxLen;
+        let moveY = (joystick.stickY - joystick.baseY) / maxLen;
+        player.vx = moveX * player.speed;
+        player.vy = moveY * player.speed;
     }
     e.preventDefault();
 }, { passive: false });
 
-window.addEventListener('touchend', () => { player.vx = 0; player.vy = 0; touchStart = null; });
+window.addEventListener('touchend', () => {
+    joystick.active = false;
+    player.vx = 0;
+    player.vy = 0;
+});
 
-// Função que desenha o Sprite Detalhado (Estilo RPG)
-function drawCharacter(x, y, color) {
+// --- DESENHO ---
+
+function drawJoystick() {
+    if (!joystick.active) return;
     ctx.save();
-    ctx.translate(x - camera.x, y - camera.y);
-
-    // Sombra
-    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.globalAlpha = 0.5;
+    // Base
     ctx.beginPath();
-    ctx.ellipse(0, 15, 12, 6, 0, 0, Math.PI * 2);
+    ctx.arc(joystick.baseX, joystick.baseY, joystick.size, 0, Math.PI*2);
+    ctx.strokeStyle = "white";
+    ctx.stroke();
+    // Stick (A parte que mexe)
+    ctx.beginPath();
+    ctx.arc(joystick.stickX, joystick.stickY, 20, 0, Math.PI*2);
+    ctx.fillStyle = "white";
     ctx.fill();
-
-    // Capa/Corpo
-    ctx.fillStyle = color;
-    ctx.fillRect(-12, -10, 24, 20); 
-
-    // Cabeça
-    ctx.fillStyle = "#eee";
-    ctx.fillRect(-10, -22, 20, 15);
-
-    // Viseira (Olhos)
-    ctx.fillStyle = "#222";
-    ctx.fillRect(-8, -17, 16, 4);
-
-    // Mãos Animadas (Procedural)
-    ctx.fillStyle = color;
-    let swing = Math.sin(Date.now() / 150) * 4;
-    if(player.vx !== 0 || player.vy !== 0) {
-        ctx.fillRect(-16, -5 + swing, 6, 6); // Mão Esq
-        ctx.fillRect(10, -5 - swing, 6, 6);  // Mão Dir
-    } else {
-        ctx.fillRect(-15, -5, 5, 5);
-        ctx.fillRect(10, -5, 5, 5);
-    }
-
     ctx.restore();
 }
 
-function drawGrid() {
-    ctx.strokeStyle = "#222";
-    ctx.lineWidth = 1;
-    let size = 100;
-    for (let x = 0; x <= worldSize; x += size) {
+function drawCharacter(x, y, color, isSlime = false) {
+    ctx.save();
+    ctx.translate(x - camera.x, y - camera.y);
+    if(isSlime) {
+        // Desenho do Slime
+        ctx.fillStyle = color;
         ctx.beginPath();
-        ctx.moveTo(x - camera.x, 0 - camera.y);
-        ctx.lineTo(x - camera.x, worldSize - camera.y);
-        ctx.stroke();
+        ctx.arc(0, 0, 15, Math.PI, 0);
+        ctx.lineTo(15, 10);
+        ctx.quadraticCurveTo(0, 15, -15, 10);
+        ctx.fill();
+        // Olhinhos
+        ctx.fillStyle = "white";
+        ctx.fillRect(-6, -5, 4, 4); ctx.fillRect(2, -5, 4, 4);
+    } else {
+        // Seu Player RPG
+        ctx.fillStyle = "rgba(0,0,0,0.3)";
+        ctx.beginPath(); ctx.ellipse(0, 15, 12, 6, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = color; ctx.fillRect(-12, -10, 24, 20); 
+        ctx.fillStyle = "#eee"; ctx.fillRect(-10, -22, 20, 15);
+        ctx.fillStyle = "#222"; ctx.fillRect(-8, -17, 16, 4);
     }
-    for (let y = 0; y <= worldSize; y += size) {
-        ctx.beginPath();
-        ctx.moveTo(0 - camera.x, y - camera.y);
-        ctx.lineTo(worldSize - camera.x, y - camera.y);
-        ctx.stroke();
+    ctx.restore();
+}
+
+function drawWorld() {
+    // Biomas Simples (Chão Verde)
+    ctx.fillStyle = "#1b4d1b"; 
+    ctx.fillRect(0 - camera.x, 0 - camera.y, worldSize, worldSize);
+    
+    // Grade
+    ctx.strokeStyle = "#256325";
+    for (let i = 0; i <= worldSize; i += 100) {
+        ctx.beginPath(); ctx.moveTo(i-camera.x, 0-camera.y); ctx.lineTo(i-camera.x, worldSize-camera.y); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0-camera.x, i-camera.y); ctx.lineTo(worldSize-camera.x, i-camera.y); ctx.stroke();
     }
 }
 
 function update() {
-    // Física de Movimento
-    player.x += player.vx;
-    player.y += player.vy;
+    player.x = Math.max(0, Math.min(worldSize, player.x + player.vx));
+    player.y = Math.max(0, Math.min(worldSize, player.y + player.vy));
 
-    // Limites do Mundo
-    player.x = Math.max(0, Math.min(worldSize, player.x));
-    player.y = Math.max(0, Math.min(worldSize, player.y));
-
-    // Câmera Suave seguindo o Player
     camera.x = player.x - canvas.width / 2;
     camera.y = player.y - canvas.height / 2;
 
-    // Renderização
-    ctx.fillStyle = "#111"; // Fundo Escuro
+    ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    drawGrid();
+    drawWorld();
+
+    // 1. Monstros (Slimes)
+    mobs.forEach(m => drawCharacter(m.x, m.y, SLIME_COLOR, true));
+
+    // Player
     drawCharacter(player.x, player.y, player.color);
 
-    // Mini Interface de Posição
-    ctx.fillStyle = "white";
-    ctx.font = "14px Monospace";
-    ctx.fillText(`COORDENADAS: X:${Math.floor(player.x)} Y:${Math.floor(player.y)}`, 20, 30);
+    drawJoystick();
 
     requestAnimationFrame(update);
 }
-
 update();
