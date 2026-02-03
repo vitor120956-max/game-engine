@@ -2,14 +2,153 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-    <title>Motor RPG Mundo Aberto</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rucoy Replica</title>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; touch-action: none; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: Arial, sans-serif; }
         canvas { display: block; }
     </style>
 </head>
 <body>
-    <script src="engine.js"></script>
+<script>
+const canvas = document.createElement('canvas');
+const ctx = canvas.getContext('2d');
+document.body.appendChild(canvas);
+
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    ctx.imageSmoothingEnabled = false;
+}
+window.addEventListener('resize', resize);
+resize();
+
+const TILE = 48;
+const player = {
+    tileX: 50, tileY: 50,
+    pixelX: 50 * TILE, pixelY: 50 * TILE,
+    targetX: 50, targetY: 50,
+    speed: 3.5, hp: 450, maxHp: 500, mp: 100, maxMp: 200,
+    lvl: 50, class: 'K', dir: 1, anim: 0, targetId: null, lastAtk: 0
+};
+
+let mobs = [];
+let popups = []; // Para os números de dano
+for(let i=0; i<30; i++) spawnMob();
+
+function spawnMob() {
+    mobs.push({
+        id: Math.random(), 
+        tileX: 40 + Math.floor(Math.random()*20), 
+        tileY: 40 + Math.floor(Math.random()*20),
+        hp: 400, maxHp: 400, name: "Vampire", 
+        flash: 0 // Para o efeito de piscar ao levar dano
+    });
+}
+
+function update() {
+    // Movimento por Grade
+    let dx = player.targetX * TILE - player.pixelX;
+    let dy = player.targetY * TILE - player.pixelY;
+
+    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+        if (Math.abs(dx) > 1) {
+            player.pixelX += Math.sign(dx) * player.speed;
+            player.dir = Math.sign(dx);
+        } else {
+            player.pixelY += Math.sign(dy) * player.speed;
+        }
+        player.anim += 0.2;
+    } else {
+        player.anim = 0;
+        player.tileX = player.targetX; player.tileY = player.targetY;
+    }
+
+    // Ataque e Popups
+    if(player.targetId !== null) {
+        let m = mobs.find(mob => mob.id === player.targetId);
+        if(m) {
+            let dist = Math.abs(player.tileX - m.tileX) + Math.abs(player.tileY - m.tileY);
+            if(dist <= 1 && Date.now() - player.lastAtk > 1000) {
+                let dmg = 35 + Math.floor(Math.random()*15);
+                m.hp -= dmg;
+                m.flash = 5; // Pisca por 5 frames
+                popups.push({ x: m.tileX * TILE + 10, y: m.tileY * TILE, text: dmg, life: 30 });
+                player.lastAtk = Date.now();
+                if(m.hp <= 0) { mobs = mobs.filter(mob => mob.id !== m.id); spawnMob(); player.targetId = null; }
+            }
+        }
+    }
+    
+    popups.forEach((p, i) => { p.y -= 1; p.life--; if(p.life <= 0) popups.splice(i, 1); });
+}
+
+function draw() {
+    let camX = player.pixelX - canvas.width / 2;
+    let camY = player.pixelY - canvas.height / 2;
+
+    // Chão
+    ctx.fillStyle = "#1e3926"; ctx.fillRect(0,0, canvas.width, canvas.height);
+    ctx.strokeStyle = "#274d34";
+    for(let x = -TILE; x < canvas.width + TILE; x += TILE) {
+        let offX = x - (camX % TILE);
+        ctx.beginPath(); ctx.moveTo(offX, 0); ctx.lineTo(offX, canvas.height); ctx.stroke();
+    }
+    for(let y = -TILE; y < canvas.height + TILE; y += TILE) {
+        let offY = y - (camY % TILE);
+        ctx.beginPath(); ctx.moveTo(0, offY); ctx.lineTo(canvas.width, offY); ctx.stroke();
+    }
+
+    // Entidades
+    mobs.forEach(m => {
+        let gx = m.tileX * TILE - camX;
+        let gy = m.tileY * TILE - camY;
+        
+        if(player.targetId === m.id) {
+            ctx.strokeStyle = "red"; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(gx + TILE/2, gy + TILE/2, 30, 0, 7); ctx.stroke();
+        }
+
+        ctx.fillStyle = m.flash > 0 ? "white" : "#4b4b4b";
+        if(m.flash > 0) m.flash--;
+        ctx.fillRect(gx+8, gy+8, TILE-16, TILE-16);
+    });
+
+    // Player
+    let px = player.pixelX - camX;
+    let py = player.pixelY - camY;
+    ctx.fillStyle = "#3498db"; ctx.fillRect(px+8, py+8, TILE-16, TILE-16);
+
+    // Popups de Dano
+    popups.forEach(p => {
+        ctx.fillStyle = "white"; ctx.font = "bold 16px Arial";
+        ctx.fillText(p.text, p.x - camX, p.y - camY);
+    });
+
+    drawHUD();
+}
+
+function drawHUD() {
+    ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fillRect(10, 10, 180, 50);
+    ctx.fillStyle = "#e74c3c"; ctx.fillRect(15, 20, (player.hp/player.maxHp)*170, 12);
+    ctx.fillStyle = "#fff"; ctx.font = "12px Arial";
+    ctx.fillText(`Lvl ${player.lvl} Knight`, 15, 52);
+}
+
+function loop() { update(); draw(); requestAnimationFrame(loop); }
+loop();
+
+canvas.addEventListener('touchstart', (e) => {
+    let t = e.touches[0];
+    let camX = player.pixelX - canvas.width / 2;
+    let camY = player.pixelY - canvas.height / 2;
+    let tx = Math.floor((t.clientX + camX) / TILE);
+    let ty = Math.floor((t.clientY + camY) / TILE);
+
+    let m = mobs.find(mob => mob.tileX === tx && mob.tileY === ty);
+    if(m) { player.targetId = m.id; player.targetX = tx; player.targetY = ty; }
+    else { player.targetX = tx; player.targetY = ty; player.targetId = null; }
+});
+</script>
 </body>
 </html>
