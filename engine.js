@@ -2,157 +2,174 @@ const canvas = document.createElement('canvas');
 const ctx = canvas.getContext('2d');
 document.body.appendChild(canvas);
 canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+ctx.imageSmoothingEnabled = false; // Deixa o visual com aspecto de Pixel Art
 
 let worldSize = 4000;
-let player = { x: 2000, y: 2000, s: 22, speed: 5, vx: 0, vy: 0, color: '#00ffff', hp: 100, frame: 0, atkFrame: 0, trails: [] };
+let player = { 
+    x: 2000, y: 2000, s: 30, speed: 4.5, vx: 0, vy: 0, 
+    color: '#3498db', hp: 100, maxHp: 100, lvl: 1, gold: 0,
+    dir: 1, frame: 0, isAttacking: false 
+};
 let cam = { x: 2000, y: 2000 };
-let mobs = [], trees = [], effects = [], joystick = { active: false, baseX: 0, baseY: 0, stickX: 0, stickY: 0 };
+let mobs = [], loot = [], trees = [], joystick = { active: false, baseX: 0, baseY: 0, stickX: 0, stickY: 0 };
 
-// Gerador de mundo
-for(let i=0; i<40; i++) mobs.push({ x: Math.random()*worldSize, y: Math.random()*worldSize, hp: 60, s: 20, t: Math.random()*10, angry: false });
-for(let i=0; i<45; i++) trees.push({ x: Math.random()*worldSize, y: Math.random()*worldSize, s: 50 });
+// Gerador de Mundo (Estilo Curse of Aros)
+for(let i=0; i<30; i++) mobs.push({ x: Math.random()*worldSize, y: Math.random()*worldSize, hp: 50, s: 20, t: Math.random()*10 });
+for(let i=0; i<40; i++) trees.push({ x: Math.random()*worldSize, y: Math.random()*worldSize, s: 60 });
 
-function drawPlayer() {
-    let gx = player.x - cam.x; let gy = player.y - cam.y;
-    player.frame += 0.2;
-    
-    // Rastro de Movimento (Anime Ghosting)
-    if(Math.hypot(player.vx, player.vy) > 2) {
-        player.trails.push({x: gx, y: gy, alpha: 0.5});
-        if(player.trails.length > 5) player.trails.shift();
-    } else { player.trails = []; }
+// --- RENDERIZAÇÃO DE SPRITES (ESTILO RUCOY) ---
 
-    player.trails.forEach((t, i) => {
-        ctx.globalAlpha = t.alpha * (i/player.trails.length);
-        ctx.fillStyle = player.color;
-        ctx.fillRect(t.x-12, t.y-12, 24, 24);
-    });
-    ctx.globalAlpha = 1;
-
-    // Corpo do Player
+function drawPixelMan(x, y, color, frame, dir, attacking) {
     ctx.save();
-    ctx.translate(gx, gy);
-    let bounce = Math.sin(player.frame) * 3;
-    
-    // Efeito de Ataque (Corte de Espada Anime)
-    if(player.atkFrame > 0) {
-        player.atkFrame -= 0.15;
-        ctx.strokeStyle = "cyan"; ctx.lineWidth = 5;
-        ctx.shadowBlur = 15; ctx.shadowColor = "cyan";
-        ctx.beginPath(); ctx.arc(0, 0, 50, -1, 1); ctx.stroke();
-        ctx.shadowBlur = 0;
+    ctx.translate(x - cam.x, y - cam.y);
+    ctx.scale(dir, 1); // Vira o personagem para a esquerda ou direita
+
+    let bounce = Math.sin(frame * 0.2) * 3;
+    let armSwing = Math.cos(frame * 0.2) * 10;
+
+    // Sombra
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.beginPath(); ctx.ellipse(0, 15, 15, 5, 0, 0, 7); ctx.fill();
+
+    // Pernas
+    ctx.fillStyle = "#2c3e50";
+    if(Math.abs(player.vx) + Math.abs(player.vy) > 0.1) {
+        ctx.fillRect(-10, 5 + armSwing/2, 8, 10);
+        ctx.fillRect(2, 5 - armSwing/2, 8, 10);
+    } else {
+        ctx.fillRect(-10, 5, 8, 10); ctx.fillRect(2, 5, 8, 10);
     }
 
-    // Design do Personagem
-    ctx.fillStyle = player.color;
-    ctx.fillRect(-12, -10 + bounce, 24, 24); // Corpo
-    ctx.fillStyle = "#FFCCBC";
-    ctx.fillRect(-10, -25 + bounce, 20, 18); // Rosto
-    ctx.fillStyle = "#000"; 
-    ctx.fillRect(-6, -20 + bounce, 4, 2); ctx.fillRect(2, -20 + bounce, 4, 2); // Olhos "Sérios"
+    // Corpo (Túnica)
+    ctx.fillStyle = color;
+    ctx.fillRect(-14, -15 + bounce, 28, 25);
+    ctx.strokeStyle = "rgba(0,0,0,0.2)"; ctx.strokeRect(-14, -15 + bounce, 28, 25);
+
+    // Braços
+    ctx.fillStyle = "#ebedee";
+    if(attacking) {
+        ctx.fillRect(10, -10, 15, 8); // Braço esticado atacando
+    } else {
+        ctx.fillRect(-18, -10 + bounce + armSwing, 6, 12);
+        ctx.fillRect(12, -10 + bounce - armSwing, 6, 12);
+    }
+
+    // Cabeça (Capacete/Cabelo)
+    ctx.fillStyle = "#FFCCBC"; ctx.fillRect(-10, -32 + bounce, 20, 18);
+    ctx.fillStyle = "#34495e"; ctx.fillRect(-12, -35 + bounce, 24, 8); // Topo do elmo
+
+    // Olhos Pixelados
+    ctx.fillStyle = "black";
+    ctx.fillRect(2, -26 + bounce, 3, 3);
+    ctx.fillRect(8, -26 + bounce, 3, 3);
+
     ctx.restore();
 }
 
 function drawMob(m) {
-    let gx = m.x - cam.x; let gy = m.y - cam.y;
-    m.t += 0.1;
-    let s = Math.sin(m.t) * 5;
+    let gx = m.x - cam.x, gy = m.y - cam.y;
+    let sq = Math.sin(m.t) * 4;
+    ctx.fillStyle = "rgba(0,0,0,0.2)"; ctx.beginPath(); ctx.ellipse(gx, gy+12, 15, 5, 0, 0, 7); ctx.fill();
     
-    // Alerta de Ataque (Mob brilha vermelho antes de agir)
-    if(m.angry) {
-        ctx.shadowBlur = 15; ctx.shadowColor = "red";
-        ctx.fillStyle = "#ff4444";
-    } else {
-        ctx.fillStyle = "#2E7D32";
-    }
-
-    ctx.beginPath();
-    ctx.ellipse(gx, gy + s, m.s + s/2, m.s - s, 0, 0, 7);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    // Olhos de Anime no Mob
-    ctx.fillStyle = "white";
-    ctx.beginPath(); ctx.moveTo(gx-10, gy+s-5); ctx.lineTo(gx-2, gy+s-2); ctx.lineTo(gx-10, gy+s+2); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(gx+10, gy+s-5); ctx.lineTo(gx+2, gy+s-2); ctx.lineTo(gx+10, gy+s+2); ctx.fill();
+    // Slime estilo Rucoy
+    ctx.fillStyle = "#2ecc71";
+    ctx.fillRect(gx-15-sq/2, gy-15+sq, 30+sq, 30-sq);
+    ctx.fillStyle = "white"; ctx.fillRect(gx-8, gy-5+sq, 4, 4); ctx.fillRect(gx+4, gy-5+sq, 4, 4);
 }
 
+// --- LÓGICA PRINCIPAL ---
+
 function update() {
+    // Movimento com correção de travamento
+    if(joystick.active) {
+        let dx = joystick.stickX - joystick.baseX;
+        let dy = joystick.stickY - joystick.baseY;
+        let dist = Math.hypot(dx, dy);
+        if(dist > 5) {
+            player.vx = (dx/dist) * player.speed;
+            player.vy = (dy/dist) * player.speed;
+            player.dir = player.vx > 0 ? 1 : -1;
+            player.frame++;
+        }
+    } else {
+        player.vx *= 0.8; player.vy *= 0.8;
+    }
+
+    player.x += player.vx;
+    player.y += player.vy;
+    
+    // Limites do mapa
+    player.x = Math.max(20, Math.min(worldSize-20, player.x));
+    player.y = Math.max(20, Math.min(worldSize-20, player.y));
+
+    // Câmera Suave
     cam.x += (player.x - canvas.width/2 - cam.x) * 0.1;
     cam.y += (player.y - canvas.height/2 - cam.y) * 0.1;
 
-    // Solo com efeito de profundidade
-    ctx.fillStyle = "#0f260f"; ctx.fillRect(0,0,canvas.width,canvas.height);
+    // --- DESENHO ---
+    ctx.fillStyle = "#27ae60"; ctx.fillRect(0,0,canvas.width,canvas.height); // Chão grama
 
-    trees.forEach(t => {
-        let gx = t.x-cam.x, gy = t.y-cam.y;
-        ctx.fillStyle = "#2e1a1a"; ctx.fillRect(gx-10, gy, 20, 40); // Tronco
-        ctx.fillStyle = "#1b4d1b"; ctx.beginPath(); ctx.arc(gx, gy-20, 40, 0, 7); ctx.fill(); // Copa
+    // Loot (Moedas no chão)
+    loot.forEach((l, i) => {
+        ctx.fillStyle = "#f1c40f"; ctx.beginPath(); ctx.arc(l.x-cam.x, l.y-cam.y, 6, 0, 7); ctx.fill();
+        if(Math.hypot(player.x-l.x, player.y-l.y) < 30) { loot.splice(i,1); player.gold += 5; }
     });
 
+    // Mobs e Combate
+    player.isAttacking = false;
     mobs.forEach((m, i) => {
+        m.t += 0.1;
         let d = Math.hypot(player.x-m.x, player.y-m.y);
-        
-        // Comportamento: Antecipação e Pulo
-        if(d < 200) {
-            m.angry = true;
-            m.x += (player.x-m.x)/d * 2.5; // Perseguição rápida
-            m.y += (player.y-m.y)/d * 2.5;
-        } else { m.angry = false; }
-
+        if(d < 150) { // Perseguição
+            m.x += (player.x-m.x)/d * 1.5; m.y += (player.y-m.y)/d * 1.5;
+        }
         drawMob(m);
-
-        // Combate (Impacto de Anime)
-        if(d < 60) {
-            player.atkFrame = 1;
-            m.hp -= 3;
-            if(Math.random() > 0.8) { // Efeito de faísca
-                effects.push({x: m.x, y: m.y, life: 1});
-            }
-            if(m.hp <= 0) {
-                mobs.splice(i, 1);
-                // Explosão de energia
-                for(let j=0; j<15; j++) effects.push({x: m.x, y: m.y, vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15, life: 1});
+        if(d < 50) {
+            player.isAttacking = true; m.hp -= 2;
+            if(m.hp <= 0) { 
+                loot.push({x: m.x, y: m.y}); 
+                mobs.splice(i,1); 
             }
         }
     });
 
-    // Partículas de Energia
-    effects.forEach((e, i) => {
-        if(e.vx) { e.x += e.vx; e.y += e.vy; }
-        e.life -= 0.05;
-        ctx.fillStyle = `rgba(0, 255, 255, ${e.life})`;
-        ctx.fillRect(e.x-cam.x, e.y-cam.y, 4, 4);
-        if(e.life <= 0) effects.splice(i, 1);
-    });
+    drawPixelMan(player.x, player.y, player.color, player.frame, player.dir, player.isAttacking);
 
-    drawPlayer();
+    // HUD (Estilo Rucoy)
+    ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(10, 10, 200, 60);
+    ctx.fillStyle = "#e74c3c"; ctx.fillRect(15, 15, (player.hp/player.maxHp)*190, 20); // HP
+    ctx.fillStyle = "white"; ctx.font = "bold 14px monospace";
+    ctx.fillText(`LVL: ${player.lvl}  GOLD: ${player.gold}`, 15, 55);
 
     // Joystick
     if(joystick.active) {
-        ctx.strokeStyle="cyan"; ctx.beginPath(); ctx.arc(joystick.baseX, joystick.baseY, 50, 0, 7); ctx.stroke();
-        ctx.fillStyle="rgba(0, 255, 255, 0.2)"; ctx.beginPath(); ctx.arc(joystick.stickX, joystick.stickY, 25, 0, 7); ctx.fill();
+        ctx.strokeStyle="white"; ctx.beginPath(); ctx.arc(joystick.baseX, joystick.baseY, 50, 0, 7); ctx.stroke();
+        ctx.fillStyle="rgba(255,255,255,0.2)"; ctx.beginPath(); ctx.arc(joystick.stickX, joystick.stickY, 25, 0, 7); ctx.fill();
     }
     requestAnimationFrame(update);
 }
 
-// Eventos Touch
+// Eventos Mobile
 window.addEventListener('touchstart', e => {
-    let t = e.touches[0]; joystick.active = true;
+    let t = e.touches[0];
+    joystick.active = true;
     joystick.baseX = t.clientX; joystick.baseY = t.clientY;
     joystick.stickX = t.clientX; joystick.stickY = t.clientY;
 });
 window.addEventListener('touchmove', e => {
     if(joystick.active) {
         let t = e.touches[0];
-        let dx = t.clientX-joystick.baseX, dy = t.clientY-joystick.baseY, dist = Math.hypot(dx, dy);
-        if(dist > 50) { joystick.stickX = joystick.baseX+(dx/dist)*50; joystick.stickY = joystick.baseY+(dy/dist)*50; }
-        else { joystick.stickX = t.clientX; joystick.stickY = t.clientY; }
-        player.vx = ((joystick.stickX-joystick.baseX)/50)*player.speed;
-        player.vy = ((joystick.stickY-joystick.baseY)/50)*player.speed;
+        let dx = t.clientX - joystick.baseX, dy = t.clientY - joystick.baseY;
+        let dist = Math.hypot(dx, dy);
+        if(dist > 50) {
+            joystick.stickX = joystick.baseX + (dx/dist)*50;
+            joystick.stickY = joystick.baseY + (dy/dist)*50;
+        } else {
+            joystick.stickX = t.clientX; joystick.stickY = t.clientY;
+        }
     }
     e.preventDefault();
 }, {passive:false});
-window.addEventListener('touchend', () => { joystick.active=false; player.vx=0; player.vy=0; });
+window.addEventListener('touchend', () => { joystick.active = false; });
 
 update();
